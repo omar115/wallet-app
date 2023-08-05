@@ -25,7 +25,7 @@ This guide will walk you through the process of setting up the environment and i
     
     Execute the bash commands below to create a virtual environment :
 
-    ```bash
+    ```
     # Install virtualenv
     pip install virtualenv
     
@@ -42,7 +42,7 @@ This guide will walk you through the process of setting up the environment and i
 
 2. **Clone the Repository**:
 
-    ```bash
+    ```
     git clone <repository-url>
     cd <repository-name>
     ```
@@ -57,7 +57,7 @@ Activate the virtual environment and install the dependencies.
 
     This project uses a `requirements.txt` file to list its dependencies. Install them using:
 
-    ```bash
+    ```
     pip install -r requirements.txt
     ```
 
@@ -67,7 +67,7 @@ Activate the virtual environment and install the dependencies.
 
 After setting up the environment and installing the necessary dependencies, you can run the FastAPI application:
 Execute the bash command in the root directory (e.g `wallet-app`)
-```bash
+```
 uvicorn main:app --reload
 ```
 
@@ -85,7 +85,7 @@ use the Dockerfile and docker commands to build the image and run the applicatio
 
 In the root directory where the Docker file located, run the below command to build the Docker image.
 
-```bash
+```
 docker build -t myapp .
 ```
 
@@ -95,6 +95,18 @@ docker build -t myapp .
 
 Run the docker command so that the application can start and you can hit the api on browser
 
-```bash
+```
 docker run -d -p 8000:8000 myapp
 ```
+
+- now, go to browser and hit this URL then you can see the detail docs of endpoints.
+
+```
+http://localhost:8000/docs
+```
+
+---
+
+## Note
+Check this technical document to get an overview of my technical work.
+[Technical Document of RESTful API development](https://drive.google.com/file/d/1ifJqPWgighAuiNvY30thyegoW4D-6V_R/view?usp=share_link)

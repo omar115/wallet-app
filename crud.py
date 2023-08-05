@@ -50,7 +50,7 @@ def add_deposit(db: Session, wallet: models.Wallet, amount: float, reference_id:
 def make_withdrawal(db: Session, wallet: models.Wallet, amount: float, reference_id: str) -> models.Transaction:
     if wallet.balance < amount:
         raise ValueError("Insufficient balance")
-    transaction = _handle_transaction(db, wallet, -amount, reference_id, TransactionType.WITHDRAWAL)
+    transaction = _handle_transaction(db, wallet, amount, reference_id, TransactionType.WITHDRAWAL)
     wallet.balance -= amount
     db.commit()
     db.refresh(transaction)
