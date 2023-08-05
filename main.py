@@ -6,7 +6,7 @@ import secrets
 from crud import create_wallet, get_wallet_by_token, add_deposit, make_withdrawal, disable_wallet, get_enable_wallet
 from database import SessionLocal, engine, Base
 from fastapi.responses import JSONResponse
-from commons import check_wallet_status, format_balance, datetime_conversion
+from commons import check_wallet_status, format_balance, datetime_conversion, extract_token
 
 Base.metadata.create_all(bind=engine)
 
@@ -23,6 +23,17 @@ def get_db():
 
 @app.post("/api/v1/init", status_code=status.HTTP_201_CREATED)
 async def initialize_account(customer_xid: str = Form(None), db: Session = Depends(get_db)):
+    """
+    Initialize an account for a given customer.
+
+    Args:
+        db (Session): Database session instance.
+        customer_xid (str): customer_xid for a single customer
+
+    Returns:
+        JSONResponse: A response indicating success or failure of account initialization.
+    """
+
     if customer_xid is None:
         content = {
             "data": {
@@ -52,11 +63,18 @@ async def initialize_account(customer_xid: str = Form(None), db: Session = Depen
 
 @app.post("/api/v1/wallet", status_code=status.HTTP_201_CREATED)
 async def enable_wallet(db: Session = Depends(get_db), authorization: Optional[str] = Header(None)):
-    if authorization is None or not authorization.startswith('Token '):
-        raise HTTPException(status_code=400, detail="Token Header not found")
+    """
+    Enable a wallet for a given customer using their token.
 
-    token = authorization.split(" ")[1].strip()
+    Args:
+        db (Session): Database session instance.
+        authorization (str): Authorization header containing customer's token.
 
+    Returns:
+        JSONResponse: A response indicating success or failure of enabling the wallet.
+    """
+
+    token = extract_token(authorization)
     try:
         wallet = get_wallet_by_token(db=db, token=token)
         if wallet is None:
@@ -94,12 +112,18 @@ async def enable_wallet(db: Session = Depends(get_db), authorization: Optional[s
 
 @app.get("/api/v1/wallet", status_code=status.HTTP_200_OK)
 async def get_wallet_balance(db: Session = Depends(get_db), authorization: Optional[str] = Header(None)):
+    """
+    Get the balance of a wallet for a given customer using their token.
 
-    if authorization is None or not authorization.startswith('Token '):
-        raise HTTPException(status_code=400, detail="Token Header not found")
+    Args:
+        db (Session): Database session instance.
+        authorization (str): Authorization header containing customer's token.
 
-    token = authorization.split(" ")[1].strip()
+    Returns:
+        JSONResponse: A response containing the wallet's balance.
+    """
 
+    token = extract_token(authorization)
     wallet = get_wallet_by_token(db=db, token=token)
     check_wallet_status(wallet)
 
@@ -121,10 +145,18 @@ async def get_wallet_balance(db: Session = Depends(get_db), authorization: Optio
 
 @app.get("/api/v1/wallet/transactions", status_code=status.HTTP_200_OK)
 async def get_wallet_transactions(db: Session = Depends(get_db), authorization: Optional[str] = Header(None)):
-    if authorization is None or not authorization.startswith('Token '):
-        raise HTTPException(status_code=400, detail="Token Header not found")
-    token = authorization.split(" ")[1].strip()
+    """
+    Get the transactions of a wallet for a given customer using their token.
 
+    Args:
+        db (Session): Database session instance.
+        authorization (str): Authorization header containing customer's token.
+
+    Returns:
+        JSONResponse: A response containing the wallet's transactions.
+    """
+
+    token = extract_token(authorization)
     wallet = get_wallet_by_token(db=db, token=token)
     check_wallet_status(wallet)
 
@@ -155,10 +187,20 @@ async def get_wallet_transactions(db: Session = Depends(get_db), authorization: 
 @app.post("/api/v1/wallet/deposits", status_code=status.HTTP_201_CREATED)
 async def add_money_to_wallet(amount: float = Form(...), reference_id: str = Form(...), db: Session = Depends(get_db),
                               authorization: Optional[str] = Header(None)):
-    if authorization is None or not authorization.startswith('Token '):
-        raise HTTPException(status_code=400, detail="Token Header not found")
-    token = authorization.split(" ")[1].strip()
+    """
+    Add money to a wallet for a given customer using their token.
 
+    Args:
+        amount (float): Amount to be deposited.
+        db (Session): Database session instance.
+        reference_id (str): Reference ID for the transaction.
+        authorization (str): Authorization header containing customer's token.
+
+    Returns:
+        JSONResponse: A response indicating success or failure of the deposit.
+    """
+
+    token = extract_token(authorization)
     wallet = get_wallet_by_token(db=db, token=token)
 
     check_wallet_status(wallet)
@@ -193,11 +235,20 @@ async def add_money_to_wallet(amount: float = Form(...), reference_id: str = For
 @app.post("/api/v1/wallet/withdrawals", status_code=status.HTTP_201_CREATED)
 async def make_a_withdrawal(amount: float = Form(...), reference_id: str = Form(...), db: Session = Depends(get_db),
                             authorization: Optional[str] = Header(None)):
-    if authorization is None or not authorization.startswith('Token '):
-        raise HTTPException(status_code=400, detail="Token Header not found")
+    """
+    Make a withdrawal from a wallet for a given customer using their token.
 
-    token = authorization.split(" ")[1].strip()
+    Args:
+        amount (float): Amount to be withdrawn.
+        db (Session): Database session instance.
+        reference_id (str): Reference ID for the transaction.
+        authorization (str): Authorization header containing customer's token.
 
+    Returns:
+        JSONResponse: A response indicating success or failure of the withdrawal.
+    """
+
+    token = extract_token(authorization)
     wallet = get_wallet_by_token(db=db, token=token)
     check_wallet_status(wallet)
 
@@ -226,11 +277,19 @@ async def make_a_withdrawal(amount: float = Form(...), reference_id: str = Form(
 @app.patch("/api/v1/wallet", status_code=status.HTTP_200_OK)
 async def disable_user_wallet(is_disabled: bool = Form(...), db: Session = Depends(get_db),
                               authorization: Optional[str] = Header(None)):
-    if not authorization or not authorization.startswith('Token '):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Token Header not found")
+    """
+    Disable a user's wallet using their token.
 
-    token = authorization.split(" ")[1].strip()
+    Args:
+        is_disabled (bool): Flag indicating whether to disable the wallet or not.
+        db (Session): Database session instance.
+        authorization (str): Authorization header containing customer's token.
 
+    Returns:
+        JSONResponse: A response indicating success or failure of disabling the wallet.
+    """
+
+    token = extract_token(authorization)
     wallet = get_wallet_by_token(db=db, token=token)
     check_wallet_status(wallet)
 

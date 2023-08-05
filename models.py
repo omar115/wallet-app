@@ -5,6 +5,11 @@ from uuid import uuid4
 
 
 class Wallet(Base):
+    """
+    Represents a Wallet entity in the database with relevant attributes such as ID,
+    customer ID, status, balance, etc.
+    """
+
     __tablename__ = "wallets"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid4()), index=True)
@@ -18,6 +23,11 @@ class Wallet(Base):
 
 
 class Transaction(Base):
+    """
+    Represents a Transaction entity in the database with relevant attributes such as ID,
+    type, status, balance, etc.
+    """
+
     __tablename__ = "transactions"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid4()), index=True)
@@ -30,4 +40,7 @@ class Transaction(Base):
     wallet = relationship("Wallet", back_populates="transactions")
 
     def to_dict(self):
+        """
+        Converts the transaction object attributes into a dictionary representation
+        """
         return {c.name: getattr(self, c.name) for c in self.__table__.columns}

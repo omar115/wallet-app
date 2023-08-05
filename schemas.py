@@ -4,6 +4,9 @@ from datetime import datetime
 
 
 class WalletBase(BaseModel):
+    """
+    WalletBase class defines the schema of a wallet object
+    """
     id: Optional[str]
     customer_xid: str
     status: Optional[str]
@@ -17,6 +20,9 @@ class WalletBase(BaseModel):
 
 
 class TransactionBase(BaseModel):
+    """
+    TransactionBase class to define the schema of Transaction object
+    """
     id: Optional[str]
     status: str
     transacted_at: datetime

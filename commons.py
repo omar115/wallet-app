@@ -1,4 +1,5 @@
-from fastapi import HTTPException
+from fastapi import HTTPException, Header
+from typing import Optional
 
 
 def check_wallet_status(wallet):
@@ -21,3 +22,9 @@ def format_balance(balance):
 
 def datetime_conversion(dt):
     return dt.isoformat() if dt else None
+
+
+def extract_token(authorization: Optional[str] = Header(None)) -> str:
+    if not authorization or not authorization.startswith('Token '):
+        raise HTTPException(status_code=400, detail="Token Header not found")
+    return authorization.split(" ")[1].strip()
