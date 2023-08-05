@@ -2,15 +2,13 @@ from fastapi import FastAPI, Depends, HTTPException, status, Form, Header
 from sqlalchemy.orm import Session
 from typing import Optional
 import secrets
-from pydantic import BaseModel
 
-import crud
-import models
-from database import SessionLocal, engine
-from schemas import *
+from crud import create_wallet, get_wallet_by_token, add_deposit, make_withdrawal, disable_wallet, get_enable_wallet
+from database import SessionLocal, engine, Base
 from fastapi.responses import JSONResponse
+from commons import check_wallet_status, format_balance, datetime_conversion
 
-models.Base.metadata.create_all(bind=engine)
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
@@ -21,15 +19,6 @@ def get_db():
         yield db
     finally:
         db.close()
-
-
-class WalletData(WalletBase):
-    token: str
-
-
-class WalletResponse(BaseModel):
-    data: WalletData
-    status: str
 
 
 @app.post("/api/v1/init", status_code=status.HTTP_201_CREATED)
@@ -48,7 +37,7 @@ async def initialize_account(customer_xid: str = Form(None), db: Session = Depen
         raise HTTPException(status_code=400, detail=content)
 
     token = secrets.token_hex(20)
-    wallet = crud.create_wallet(db=db, customer_xid=customer_xid, token=token)
+    wallet = create_wallet(db=db, customer_xid=customer_xid, token=token)
 
     content = {
         "data": {
@@ -65,10 +54,11 @@ async def initialize_account(customer_xid: str = Form(None), db: Session = Depen
 async def enable_wallet(db: Session = Depends(get_db), authorization: Optional[str] = Header(None)):
     if authorization is None or not authorization.startswith('Token '):
         raise HTTPException(status_code=400, detail="Token Header not found")
+
     token = authorization.split(" ")[1].strip()
-    print(token)
+
     try:
-        wallet = crud.get_wallet_by_token(db=db, token=token)
+        wallet = get_wallet_by_token(db=db, token=token)
         if wallet is None:
             raise HTTPException(status_code=404, detail="Wallet not found")
 
@@ -81,7 +71,7 @@ async def enable_wallet(db: Session = Depends(get_db), authorization: Optional[s
             }
             raise HTTPException(status_code=400, detail=content)
 
-        wallet = crud.enable_wallet(db=db, wallet=wallet)
+        wallet = get_enable_wallet(db=db, wallet=wallet)
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -93,8 +83,8 @@ async def enable_wallet(db: Session = Depends(get_db), authorization: Optional[s
                 "id": wallet.id,
                 "owned_by": wallet.customer_xid,
                 "status": wallet.status,
-                "enabled_at": wallet.enabled_at.isoformat() if wallet.enabled_at else None,
-                "balance": wallet.balance
+                "enabled_at": datetime_conversion(wallet.enabled_at),
+                "balance": format_balance(wallet.balance)
             }
         }
     }
@@ -104,23 +94,14 @@ async def enable_wallet(db: Session = Depends(get_db), authorization: Optional[s
 
 @app.get("/api/v1/wallet", status_code=status.HTTP_200_OK)
 async def get_wallet_balance(db: Session = Depends(get_db), authorization: Optional[str] = Header(None)):
+
     if authorization is None or not authorization.startswith('Token '):
         raise HTTPException(status_code=400, detail="Token Header not found")
+
     token = authorization.split(" ")[1].strip()
 
-    wallet = crud.get_wallet_by_token(db=db, token=token)
-
-    if wallet is None:
-        raise HTTPException(status_code=404, detail="Wallet not found")
-
-    if wallet.status != 'enabled':
-        content = {
-            "status": "fail",
-            "data": {
-                "error": "Wallet disabled"
-            }
-        }
-        raise HTTPException(status_code=400, detail=content)
+    wallet = get_wallet_by_token(db=db, token=token)
+    check_wallet_status(wallet)
 
     content = {
         "status": "success",
@@ -129,8 +110,8 @@ async def get_wallet_balance(db: Session = Depends(get_db), authorization: Optio
                 "id": wallet.id,
                 "owned_by": wallet.customer_xid,
                 "status": wallet.status,
-                "enabled_at": wallet.enabled_at.isoformat() if wallet.enabled_at else None,
-                "balance": wallet.balance
+                "enabled_at": datetime_conversion(wallet.enabled_at),
+                "balance": format_balance(wallet.balance)
             }
         }
     }
@@ -144,19 +125,8 @@ async def get_wallet_transactions(db: Session = Depends(get_db), authorization: 
         raise HTTPException(status_code=400, detail="Token Header not found")
     token = authorization.split(" ")[1].strip()
 
-    wallet = crud.get_wallet_by_token(db=db, token=token)
-
-    if wallet is None:
-        raise HTTPException(status_code=404, detail="Wallet not found")
-
-    if wallet.status != 'enabled':
-        content = {
-            "status": "fail",
-            "data": {
-                "error": "Wallet disabled"
-            }
-        }
-        raise HTTPException(status_code=400, detail=content)
+    wallet = get_wallet_by_token(db=db, token=token)
+    check_wallet_status(wallet)
 
     transactions = wallet.transactions
 
@@ -164,9 +134,9 @@ async def get_wallet_transactions(db: Session = Depends(get_db), authorization: 
         {
             "id": transaction.id,
             "status": transaction.status,
-            "transacted_at": transaction.transacted_at.isoformat() if transaction.transacted_at else None,
+            "transacted_at": datetime_conversion(transaction.transacted_at),
             "type": transaction.type,
-            "amount": transaction.amount,
+            "amount": format_balance(transaction.amount),
             "reference_id": transaction.reference_id
         }
         for transaction in transactions
@@ -189,22 +159,12 @@ async def add_money_to_wallet(amount: float = Form(...), reference_id: str = For
         raise HTTPException(status_code=400, detail="Token Header not found")
     token = authorization.split(" ")[1].strip()
 
-    wallet = crud.get_wallet_by_token(db=db, token=token)
-    if wallet is None:
-        raise HTTPException(status_code=404, detail="Wallet not found")
+    wallet = get_wallet_by_token(db=db, token=token)
 
-    # Ensure wallet is enabled before deposit
-    if wallet.status != 'enabled':
-        content = {
-            "status": "fail",
-            "data": {
-                "error": "Wallet is not enabled"
-            }
-        }
-        raise HTTPException(status_code=400, detail=content)
+    check_wallet_status(wallet)
 
     try:
-        transaction = crud.add_deposit(
+        transaction = add_deposit(
             db=db,
             wallet=wallet,
             amount=amount,
@@ -220,8 +180,8 @@ async def add_money_to_wallet(amount: float = Form(...), reference_id: str = For
                 "id": transaction.id,
                 "deposited_by": wallet.customer_xid,
                 "status": transaction.status,
-                "deposited_at": transaction.transacted_at.isoformat(),
-                "amount": transaction.amount,
+                "deposited_at": datetime_conversion(transaction.transacted_at),
+                "amount": format_balance(transaction.amount),
                 "reference_id": transaction.reference_id
             }
         }
@@ -238,21 +198,11 @@ async def make_a_withdrawal(amount: float = Form(...), reference_id: str = Form(
 
     token = authorization.split(" ")[1].strip()
 
-    wallet = crud.get_wallet_by_token(db=db, token=token)
-    if wallet is None:
-        raise HTTPException(status_code=404, detail="Wallet not found")
-
-    if wallet.status != 'enabled':
-        content = {
-            "status": "fail",
-            "data": {
-                "error": "Wallet is not enabled"
-            }
-        }
-        raise HTTPException(status_code=400, detail=content)
+    wallet = get_wallet_by_token(db=db, token=token)
+    check_wallet_status(wallet)
 
     try:
-        transaction = crud.make_withdrawal(db=db, wallet=wallet, amount=amount, reference_id=reference_id)
+        transaction = make_withdrawal(db=db, wallet=wallet, amount=amount, reference_id=reference_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -263,8 +213,8 @@ async def make_a_withdrawal(amount: float = Form(...), reference_id: str = Form(
                 "id": transaction.id,
                 "withdrawn_by": wallet.customer_xid,
                 "status": transaction.status,
-                "withdrawn_at": transaction.transacted_at.isoformat(),
-                "amount": abs(transaction.amount),
+                "withdrawn_at": datetime_conversion(transaction.transacted_at),
+                "amount": format_balance(transaction.amount),
                 "reference_id": transaction.reference_id
             }
         }
@@ -281,12 +231,11 @@ async def disable_user_wallet(is_disabled: bool = Form(...), db: Session = Depen
 
     token = authorization.split(" ")[1].strip()
 
-    wallet = crud.get_wallet_by_token(db=db, token=token)
-    if not wallet:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Wallet not found")
+    wallet = get_wallet_by_token(db=db, token=token)
+    check_wallet_status(wallet)
 
     if is_disabled:
-        wallet = crud.disable_wallet(db=db, wallet=wallet)
+        wallet = disable_wallet(db=db, wallet=wallet)
 
     content = {
         "status": "success",
@@ -295,8 +244,8 @@ async def disable_user_wallet(is_disabled: bool = Form(...), db: Session = Depen
                 "id": wallet.id,
                 "owned_by": wallet.customer_xid,
                 "status": wallet.status,
-                "disabled_at": wallet.disabled_at.isoformat() if wallet.disabled_at else None,
-                "balance": wallet.balance
+                "disabled_at": datetime_conversion(wallet.disabled_at),
+                "balance": format_balance(wallet.balance)
             }
         }
     }

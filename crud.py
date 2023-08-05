@@ -15,7 +15,7 @@ def get_wallet_by_token(db: Session, token: str):
     return db.query(models.Wallet).filter(models.Wallet.token == token).one_or_none()
 
 
-def enable_wallet(db: Session, wallet: models.Wallet):
+def get_enable_wallet(db: Session, wallet: models.Wallet):
     if wallet.status == "enabled":
         raise ValueError("Wallet is already enabled")
 

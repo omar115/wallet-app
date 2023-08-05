@@ -36,3 +36,12 @@ class DepositRequest(BaseModel):
 
 class DisableWalletRequest(BaseModel):
     is_disabled: bool
+
+
+class WalletData(WalletBase):
+    token: str
+
+
+class WalletResponse(BaseModel):
+    data: WalletData
+    status: str
